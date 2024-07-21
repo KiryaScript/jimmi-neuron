@@ -1,3 +1,8 @@
+
+![Uploading bot.jpg…]()
+
+
+
 Jimmi Neuron - Discord Bot
 Jimmi Neuron is a powerful Discord bot with a wide range of features, including voice recording, playback, local audio file playback, weather information, and mini-games.
 
