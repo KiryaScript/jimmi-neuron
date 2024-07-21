@@ -1,0 +1,11 @@
+discord.py
+youtube-dl
+validators
+requests
+openai
+pydub
+ffmpeg-python
+wave
+characterai
+PyNaCl
+json
