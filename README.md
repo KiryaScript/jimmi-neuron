@@ -1,6 +1,3 @@
-# jimmi-neuron
-
-
 Jimmi Neuron - Discord Bot
 Jimmi Neuron is a powerful Discord bot with a wide range of features, including voice recording, playback, local audio file playback, weather information, and mini-games.
 
@@ -47,3 +44,31 @@ If you'd like to contribute to the Jimmi Neuron project, please feel free to sub
 
 License
 This project is licensed under the MIT License.
+
+Usage
+To use the Jimmi Neuron bot, simply invite it to your Discord server and start exploring the available commands. Here's how you can interact with the bot:
+
+Voice Recording and Playback:
+Use the record command to start recording the voice channel.
+Use the stoprecord command to stop the recording.
+Use the playup command to play the recorded audio.
+Local Audio File Playback:
+Use the up command to upload an audio file to the bot.
+Use the playup command to play the uploaded audio file.
+Message Cleanup:
+Use the clear command followed by the number of messages to delete.
+Weather Information:
+Use the weather command followed by the name of the city to get the weather information.
+Mini-Games:
+Use the flip command to flip a coin.
+Use the roll command to roll a dice (1-100).
+Other Commands:
+Use the help command to see the list of available commands and their descriptions.
+Use the join command to make the bot join your voice channel.
+Use the leave command to make the bot leave the voice channel.
+Use the ban and unban commands to manage user bans.
+Use the kick command to remove a user from the server.
+Use the ctv command to create a temporary voice channel.
+Use the serstats command to view server statistics.
+Use the start_tasks and stop_tasks commands to manage periodic tasks.
+Use the stop command to stop the bot.
