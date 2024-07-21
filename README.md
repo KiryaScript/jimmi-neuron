@@ -77,3 +77,6 @@ Use the ctv command to create a temporary voice channel.
 Use the serstats command to view server statistics.
 Use the start_tasks and stop_tasks commands to manage periodic tasks.
 Use the stop command to stop the bot.
+
+
+I plan to add character.ai to the bot in the future.
