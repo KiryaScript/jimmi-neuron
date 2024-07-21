@@ -33,7 +33,7 @@ weather: Retrieves the weather for a specified city.
 Installation and Setup
 To use the Jimmi Neuron bot, you'll need to have Python and the necessary dependencies installed. Follow these steps to get started:
 
-Clone the repository: git clone https://github.com/your-username/jimmi-neuron.git
+Clone the repository: git clone https://github.com/KiryaScript/jimmi-neuron.git
 Install the required dependencies: pip install -r requirements.txt
 Set up the bot's configuration by creating a .env file and adding the necessary environment variables (e.g., Discord bot token, OpenWeatherMap API key).
 Run the bot: python main.py
