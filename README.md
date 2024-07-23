@@ -1,5 +1,3 @@
-Here's the restructured text formatted for a GitHub README.md file:
-
 # Jimmi Neuron - Discord Bot
 
 ![it's a bot](https://i.postimg.cc/mkXk4pGY/bot.jpg)
