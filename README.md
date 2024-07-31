@@ -5,6 +5,7 @@
 Jimmi Neuron is a powerful Discord bot with a wide range of features, including voice recording, playback, local audio file playback, weather information, and mini-games.
 
 ## Features
+/
 
 - **Voice Recording and Playback**: Record and playback conversations in voice channels.
 - **Local Audio File Playback**: Play local audio files.
