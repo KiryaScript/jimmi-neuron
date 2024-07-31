@@ -18,11 +18,11 @@ from characterai import pycai
 import nacl
 import json
 
-# Настройки бота
+
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Глобальные переменные для записи
+
 recording = False
 audio_filename = 'voice_recording.wav'
 
