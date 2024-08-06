@@ -23,11 +23,332 @@ from mutagen.oggvorbis import OggVorbis
 import psutil
 import platform
 import GPUtil
+import sqlite3
+import datetime
+import random
+import logging
 
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# Подключение к базе данных
+conn = sqlite3.connect('clicker.db')
+cursor = conn.cursor()
+
+# Создание таблиц
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS clicks
+    (user_id TEXT PRIMARY KEY, clicks INTEGER, double_click INTEGER, auto_clicker INTEGER)
+''')
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS daily_rewards
+    (user_id TEXT PRIMARY KEY, last_claim DATE)
+''')
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS achievements
+    (user_id TEXT, achievement TEXT, PRIMARY KEY (user_id, achievement))
+''')
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS weekly_clicks
+    (user_id TEXT, clicks INTEGER, week INTEGER, year INTEGER, PRIMARY KEY (user_id, week, year))
+''')
+conn.commit()
+
+class ClickerBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        super().__init__(command_prefix='!', intents=intents)
+
+    async def setup_hook(self):
+        self.loop.create_task(self.create_clicker_button())
+        logging.info("Setup hook called")
+
+    async def create_clicker_button(self):
+        await self.wait_until_ready()
+        logging.info("Creating clicker button")
+        channel_id = 123456789  # Замените на ID вашего канала
+        channel = self.get_channel(channel_id)
+        
+        if channel:
+            logging.info(f"Channel found: {channel.name}")
+            view = discord.ui.View(timeout=None)
+            button = ClickerButton(user_id=None)
+            view.add_item(button)
+            
+            try:
+                await channel.send("Click the button to play!", view=view)
+                logging.info("Message with button sent successfully")
+            except Exception as e:
+                logging.error(f"Error sending message: {e}")
+        else:
+            logging.error(f"Channel with id {channel_id} not found")
+
+bot = ClickerBot()
+
+class ClickerButton(discord.ui.Button):
+    def __init__(self, user_id):
+        super().__init__(style=discord.ButtonStyle.primary, label="Click me!")
+        self.user_id = user_id
+
+    async def callback(self, interaction: discord.Interaction):
+        self.user_id = str(interaction.user.id)  # Устанавливаем user_id при первом нажатии
+        
+        cursor.execute('SELECT double_click FROM clicks WHERE user_id = ?', (self.user_id,))
+        result = cursor.fetchone()
+        double_click = result[0] if result else 0
+        click_value = 2 if double_click else 1
+        
+        cursor.execute('INSERT OR REPLACE INTO clicks (user_id, clicks, double_click, auto_clicker) VALUES (?, COALESCE((SELECT clicks FROM clicks WHERE user_id = ?) + ?, 1), COALESCE((SELECT double_click FROM clicks WHERE user_id = ?), 0), COALESCE((SELECT auto_clicker FROM clicks WHERE user_id = ?), 0))', 
+                       (self.user_id, self.user_id, click_value, self.user_id, self.user_id))
+        conn.commit()
+        
+        cursor.execute('SELECT clicks FROM clicks WHERE user_id = ?', (self.user_id,))
+        clicks = cursor.fetchone()[0]
+        
+        await check_achievements(self.user_id, clicks)
+        
+        await interaction.response.edit_message(content=f"Clicks: {clicks:,}", view=self.view)
+
+@bot.command(name='create_button', help='Создать кнопку кликера')
+async def create_button(ctx):
+    view = discord.ui.View(timeout=None)
+    button = ClickerButton(user_id=None)
+    view.add_item(button)
+    await ctx.send("Нажмите на кнопку, чтобы играть!", view=view)
+
+class ClickerView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=None)
+        self.add_item(ClickerButton(user_id))
+
+@bot.command()
+async def clicker(ctx):
+    user_id = str(ctx.author.id)
+    view = ClickerView(user_id)
+    
+    cursor.execute('SELECT clicks FROM clicks WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    clicks = result[0] if result else 0
+    
+    await ctx.send(f"Clicks: {clicks:,}", view=view)
+
+@bot.command()
+async def stats(ctx):
+    user_id = str(ctx.author.id)
+    cursor.execute('SELECT clicks FROM clicks WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    clicks = result[0] if result else 0
+    await ctx.send(f"You have {clicks:,} clicks.")
+
+@bot.command()
+async def leaderboard(ctx):
+    cursor.execute('SELECT user_id, clicks FROM clicks ORDER BY clicks DESC LIMIT 10')
+    results = cursor.fetchall()
+    
+    embed = discord.Embed(title="🏆 Clicker Leaderboard 🏆", color=0x00ff00)
+    embed.set_thumbnail(url="https://example.com/trophy_icon.png")  # Замените на URL иконки трофея
+    
+    for i, (user_id, clicks) in enumerate(results, start=1):
+        user = await bot.fetch_user(int(user_id))
+        medal = ""
+        if i == 1:
+            medal = "🥇"
+        elif i == 2:
+            medal = "🥈"
+        elif i == 3:
+            medal = "🥉"
+        
+        embed.add_field(
+            name=f"{medal} Rank #{i}",
+            value=f"**{user.name}**\n{clicks:,} clicks",
+            inline=False
+        )
+    
+    embed.set_footer(text="Keep clicking to climb the ranks!")
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def mystats(ctx):
+    user_id = str(ctx.author.id)
+    cursor.execute('SELECT clicks, double_click, auto_clicker FROM clicks WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    if result:
+        clicks, double_click, auto_clicker = result
+    else:
+        clicks, double_click, auto_clicker = 0, 0, 0
+    
+    cursor.execute('SELECT COUNT(*) FROM clicks WHERE clicks > ?', (clicks,))
+    rank = cursor.fetchone()[0] + 1
+    
+    embed = discord.Embed(title=f"📊 Stats for {ctx.author.name}", color=0x00ff00)
+    embed.add_field(name="Total Clicks", value=f"{clicks:,}", inline=False)
+    embed.add_field(name="Global Rank", value=f"#{rank}", inline=False)
+    embed.add_field(name="Double Click", value="Activated" if double_click else "Not activated", inline=False)
+    embed.add_field(name="Auto Clicker", value="Activated" if auto_clicker else "Not activated", inline=False)
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def shop(ctx):
+    embed = discord.Embed(title="🛒 Clicker Shop", description="Upgrade your clicking power!", color=0x00ff00)
+    embed.add_field(name="1. Double Click", value="Cost: 100 clicks\nYour clicks count twice", inline=False)
+    embed.add_field(name="2. Auto Clicker", value="Cost: 500 clicks\nAutomatically clicks once every minute", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def buy(ctx, item: str):
+    user_id = str(ctx.author.id)
+    cursor.execute('SELECT clicks, double_click, auto_clicker FROM clicks WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    
+    if not result:
+        await ctx.send("You haven't started clicking yet! Use the `click` command first.")
+        return
+
+    clicks, double_click, auto_clicker = result
+
+    items = {
+        "double": {"cost": 100, "check": not double_click, "column": "double_click"},
+        "auto": {"cost": 500, "check": not auto_clicker, "column": "auto_clicker"}
+    }
+
+    if item not in items:
+        await ctx.send("Invalid item. Available items: 'double' (Double Click) or 'auto' (Auto Clicker)")
+        return
+
+    selected_item = items[item]
+
+    if clicks < selected_item["cost"]:
+        await ctx.send(f"You don't have enough clicks. You need {selected_item['cost']} clicks.")
+        return
+
+    if not selected_item["check"]:
+        await ctx.send(f"You already have the {item.capitalize()} upgrade.")
+        return
+
+    cursor.execute(f'UPDATE clicks SET clicks = clicks - ?, {selected_item["column"]} = 1 WHERE user_id = ?', 
+                   (selected_item["cost"], user_id))
+    conn.commit()
+
+    await ctx.send(f"You've bought the {item.capitalize()} upgrade!")
+
+@bot.command()
+async def daily(ctx):
+    user_id = str(ctx.author.id)
+    today = datetime.date.today()
+    
+    cursor.execute('SELECT last_claim FROM daily_rewards WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    
+    if result and result[0] == str(today):
+        await ctx.send("You've already claimed your daily reward today. Come back tomorrow!")
+    else:
+        reward = random.randint(50, 200)
+        cursor.execute('INSERT OR REPLACE INTO daily_rewards (user_id, last_claim) VALUES (?, ?)', (user_id, str(today)))
+        cursor.execute('UPDATE clicks SET clicks = clicks + ? WHERE user_id = ?', (reward, user_id))
+        conn.commit()
+        await ctx.send(f"You've claimed your daily reward of {reward} clicks!")
+
+@bot.command()
+async def achievements(ctx):
+    user_id = str(ctx.author.id)
+    cursor.execute('SELECT achievement FROM achievements WHERE user_id = ?', (user_id,))
+    user_achievements = cursor.fetchall()
+    
+    embed = discord.Embed(title=f"🏅 Achievements for {ctx.author.name}", color=0xffd700)
+    if user_achievements:
+        for (achievement,) in user_achievements:
+            embed.add_field(name=achievement, value="Unlocked! 🎉", inline=False)
+    else:
+        embed.description = "You haven't unlocked any achievements yet. Keep clicking!"
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def weekly_leaderboard(ctx):
+    today = datetime.date.today()
+    week = today.isocalendar()[1]
+    year = today.year
+    
+    cursor.execute('''
+        SELECT user_id, SUM(clicks) as total_clicks 
+        FROM weekly_clicks 
+        WHERE week = ? AND year = ? 
+        GROUP BY user_id 
+        ORDER BY total_clicks DESC 
+        LIMIT 10
+    ''', (week, year))
+    results = cursor.fetchall()
+    
+    embed = discord.Embed(title=f"🏆 Weekly Leaderboard (Week {week})", color=0x00ff00)
+    
+    for i, (user_id, clicks) in enumerate(results, start=1):
+        user = await bot.fetch_user(int(user_id))
+        medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else ""
+        embed.add_field(
+            name=f"{medal} Rank #{i}",
+            value=f"**{user.name}**\n{clicks:,} clicks",
+            inline=False
+        )
+    
+    embed.set_footer(text="Keep clicking to climb the weekly ranks!")
+    await ctx.send(embed=embed)
+
+async def auto_clicker():
+    while True:
+        cursor.execute('SELECT user_id FROM clicks WHERE auto_clicker = 1')
+        auto_clicker_users = cursor.fetchall()
+        for (user_id,) in auto_clicker_users:
+            cursor.execute('UPDATE clicks SET clicks = clicks + 1 WHERE user_id = ?', (user_id,))
+        conn.commit()
+        await asyncio.sleep(60)  # Wait for 1 minute
+
+@tasks.loop(minutes=5)
+async def update_weekly_clicks():
+    today = datetime.date.today()
+    week = today.isocalendar()[1]
+    year = today.year
+    
+    cursor.execute('SELECT user_id, clicks FROM clicks')
+    all_clicks = cursor.fetchall()
+    
+    for user_id, clicks in all_clicks:
+        cursor.execute('''
+            INSERT OR REPLACE INTO weekly_clicks (user_id, clicks, week, year)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, clicks, week, year))
+    
+    conn.commit()
+
+@tasks.loop(minutes=30)
+async def random_event():
+    cursor.execute('SELECT user_id FROM clicks ORDER BY RANDOM() LIMIT 1')
+    result = cursor.fetchone()
+    if result:
+        user_id = result[0]
+        bonus_clicks = random.randint(100, 1000)
+        cursor.execute('UPDATE clicks SET clicks = clicks + ? WHERE user_id = ?', (bonus_clicks, user_id))
+        conn.commit()
+        user = await bot.fetch_user(int(user_id))
+        channel = bot.get_channel(int(os.getenv('ANNOUNCEMENT_CHANNEL_ID')))
+        await channel.send(f"🎉 Random event! {user.mention} just received {bonus_clicks} bonus clicks!")
+
+async def check_achievements(user_id, clicks):
+    achievements = [
+        ("Beginner Clicker", 100),
+        ("Intermediate Clicker", 1000),
+        ("Advanced Clicker", 10000),
+        ("Expert Clicker", 100000),
+        ("Master Clicker", 1000000)
+    ]
+    
+    for achievement, required_clicks in achievements:
+        if clicks >= required_clicks:
+            cursor.execute('INSERT OR IGNORE INTO achievements (user_id, achievement) VALUES (?, ?)', (user_id, achievement))
+            conn.commit()
 
 recording = False
 audio_filename = 'voice_recording.wav'
@@ -731,7 +1052,6 @@ async def on_member_join(member):
         embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
         await channel.send(embed=embed)
 
-
     role = discord.utils.get(member.guild.roles, name='Новичок')
     if role:
         await member.add_roles(role)
@@ -770,14 +1090,16 @@ async def sysinfo(ctx):
     embed.add_field(name="Диск", value=f"Всего: {disk.total / (1024**3):.2f} GB\n"
                                        f"Использовано: {disk.used / (1024**3):.2f} GB ({disk.percent}%)", inline=False)
     
+    # Добавление информации о температуре (если доступно)
     try:
         temperatures = psutil.sensors_temperatures()
         if 'coretemp' in temperatures:
             cpu_temp = temperatures['coretemp'][0].current
             embed.add_field(name="Температура ЦП", value=f"{cpu_temp}°C", inline=True)
     except:
-        pass
+        pass  # Если информация о температуре недоступна, просто пропускаем
 
+    # Добавление информации о GPU (если доступно)
     try:
         gpus = GPUtil.getGPUs()
         if gpus:
@@ -786,11 +1108,14 @@ async def sysinfo(ctx):
                                               f"Использование: {gpu.load*100:.2f}%\n"
                                               f"Память: {gpu.memoryUsed}/{gpu.memoryTotal} MB", inline=False)
     except:
-        pass
+        pass  # Если информация о GPU недоступна, просто пропускаем
 
     await ctx.send(embed=embed)
 
-TOKEN = 'TOKEN' #your token
+
+
+
+TOKEN = 'TOKEN'
 
 @bot.event
 async def on_ready():
