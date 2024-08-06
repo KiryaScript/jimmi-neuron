@@ -790,7 +790,7 @@ async def sysinfo(ctx):
 
     await ctx.send(embed=embed)
 
-TOKEN = 'TOKEN'
+TOKEN = 'TOKEN' #your token
 
 @bot.event
 async def on_ready():
