@@ -42,8 +42,7 @@ Jimmi Neuron is a powerful Discord bot with a wide range of features, including 
 
 1. Clone the repository: `git clone https://github.com/KiryaScript/jimmi-neuron.git`
 2. Install the required dependencies: `pip install -r requirements.txt`
-3. Set up the bot's configuration by creating a `.env` file and adding the necessary environment variables (e.g., Discord bot token, OpenWeatherMap API key).
-4. Run the bot: `python main.py`
+3. Run the bot: `python main.py`
 
 ## Usage
 
